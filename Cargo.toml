@@ -1,21 +1,21 @@
 [package]
-name = "yat"
+name = "todo-ranger"
 version = "0.1.0"
 authors = ["drvog"]
 edition = "2018"
-description = "A simple terminal todo list manager."
-repository = "https://github.com/drvog/yat-rs"
+description = "Fork of yat - A simple terminal todo list manager."
+repository = "https://github.com/0re5ama/todo-ranger"
 readme = "README.md"
 keywords = ["todo", "task"]
 categories = ["command-line-utilities"]
 license-file = "LICENSE"
 
 [dependencies]
-termion = "1.5.3"
-dirs = "1.0"
-log = "0.4.6"
-fern = "0.5.8"
-chrono = "0.4.7"
-toml = "0.5.1"
-serde = { version = "1.0.0", features = ["derive"] }
-unicode-width = "0.1.8"
+termion = "4.0.2"
+dirs = "5.0.1"
+log = "0.4.22"
+fern = "0.7.0"
+chrono = "0.4.38"
+toml = "0.8.19"
+serde = { version = "1.0.210", features = ["derive"] }
+unicode-width = "0.2.0"

@@ -50,6 +50,7 @@ struct Keys {
     save: Option<char>,
     add: Option<char>,
     edit: Option<char>,
+    cancel: Option<char>,
     delete: Option<char>,
     task_up: Option<char>,
     task_down: Option<char>,
@@ -62,7 +63,7 @@ struct Keys {
     sort: Option<char>,
 }
 
-/// Yat's configuration.
+/// Configuration.
 pub struct Config<'a> {
     /// Border configuration.
     /// Horizontal border character(s)
@@ -101,7 +102,7 @@ pub struct Config<'a> {
     pub colourbg: &'a dyn color::Color,
 
     /// Keybinding configuration.
-    /// Key to quit yat.
+    /// Key to quit.
     pub quit: Key,
     /// Key to return focus to parent.
     pub back: Key,
@@ -111,6 +112,8 @@ pub struct Config<'a> {
     pub add: Key,
     /// Key to edit selected task.
     pub edit: Key,
+    /// Key to cancel out of add / edit task.
+    pub cancel: Key,
     /// Key to delete selected task.
     pub delete: Key,
     /// Key to move selected task up.
@@ -139,9 +142,9 @@ pub struct Config<'a> {
     pub print_priority: bool,
 }
 
-impl<'a> Config<'a> {
+impl<'a> Default for Config<'a> {
     /// Create default configuration.
-    pub fn default() -> Config<'static> {
+    fn default() -> Config<'static> {
         // Default border characters
         let hline = "─";
         let vline = "│";
@@ -166,16 +169,17 @@ impl<'a> Config<'a> {
 
         // Default keybindings
         let quit = Key::Char('q');
-        let back = Key::Char('b');
+        let back = Key::Char('h');
         let save = Key::Char('w');
         let add = Key::Char('a');
         let edit = Key::Char('e');
+        let cancel = Key::Esc;
         let delete = Key::Char('d');
-        let task_up = Key::Char('u');
-        let task_down = Key::Char('n');
-        let up = Key::Up;
-        let down = Key::Down;
-        let focus = Key::Char('\n');
+        let task_up = Key::Char('K');
+        let task_down = Key::Char('J');
+        let up = Key::Char('k');
+        let down = Key::Char('j');
+        let focus = Key::Char('l');
         let complete = Key::Char(' ');
         let increase = Key::Char('>');
         let decrease = Key::Char('<');
@@ -207,6 +211,7 @@ impl<'a> Config<'a> {
             save,
             add,
             edit,
+            cancel,
             delete,
             task_up,
             task_down,
@@ -246,6 +251,7 @@ pub struct ConfigBuffer {
     pub save: Option<Key>,
     pub add: Option<Key>,
     pub edit: Option<Key>,
+    pub cancel: Option<Key>,
     pub delete: Option<Key>,
     pub task_up: Option<Key>,
     pub task_down: Option<Key>,
@@ -313,6 +319,7 @@ impl ConfigBuffer {
         let save = choose_config_val!(save, "save key");
         let add = choose_config_val!(add, "add key");
         let edit = choose_config_val!(edit, "edit key");
+        let cancel = choose_config_val!(edit, "cancel key");
         let delete = choose_config_val!(delete, "delete key");
         let task_up = choose_config_val!(task_up, "task_up key");
         let task_down = choose_config_val!(task_down, "task_down key");
@@ -348,6 +355,7 @@ impl ConfigBuffer {
             save,
             add,
             edit,
+            cancel,
             delete,
             task_up,
             task_down,
@@ -443,6 +451,7 @@ pub fn check_for_config() -> Option<ConfigBuffer> {
         save,
         add,
         edit,
+        cancel,
         delete,
         task_up,
         task_down,
@@ -460,6 +469,7 @@ pub fn check_for_config() -> Option<ConfigBuffer> {
             keys.save,
             keys.add,
             keys.edit,
+            keys.cancel,
             keys.delete,
             keys.task_up,
             keys.task_down,
@@ -473,7 +483,7 @@ pub fn check_for_config() -> Option<ConfigBuffer> {
         ),
         None => (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None,
+            None, None,
         ),
     };
 
@@ -502,6 +512,7 @@ pub fn check_for_config() -> Option<ConfigBuffer> {
         save: save.map(Key::Char),
         add: add.map(Key::Char),
         edit: edit.map(Key::Char),
+        cancel: cancel.map(Key::Char),
         delete: delete.map(Key::Char),
         task_up: task_up.map(Key::Char),
         task_down: task_down.map(Key::Char),
@@ -513,6 +524,6 @@ pub fn check_for_config() -> Option<ConfigBuffer> {
         decrease: decrease.map(Key::Char),
         sort: sort.map(Key::Char),
         save_on_exit,
-        print_priority
+        print_priority,
     })
 }

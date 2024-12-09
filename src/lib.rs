@@ -18,6 +18,13 @@ use todo::{Priority, ToDo};
 use tui::Window;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+enum MoveDirection {
+    Up,
+    Down,
+    Home,
+    End,
+}
+
 /// Check if save file exists.
 pub fn look_for_save(mut args: Args) -> Result<PathBuf, ()> {
     args.next();
@@ -162,7 +169,7 @@ impl<'a> View<'a> {
             // Use indentation to determine where to insert each task. If
             // indentation is the same as the previous line then we continue
             // adding sub-tasks to the current line.
-            let num_tabs = tab_num(&line);
+            let num_tabs = tab_num(line);
             let current = Rc::clone(&self.current_task);
             if num_tabs == tabs + 1 {
                 // If indentation is increased compared to the previous line,
@@ -172,7 +179,7 @@ impl<'a> View<'a> {
                     return Err("Can't have child without parent.");
                 }
                 let new_current = &current.borrow().sub_tasks[n - 1];
-                self.current_task = Rc::clone(&new_current);
+                self.current_task = Rc::clone(new_current);
             } else if num_tabs < tabs {
                 // If indentation is decreased compared to the previous line,
                 // then the parent (or an even earlier ancestor) of the
@@ -222,8 +229,13 @@ impl<'a> View<'a> {
                 Some(key) if key == self.window.config.task_down => self.move_task(false),
                 Some(key) if key == self.window.config.focus => self.new_focus(),
                 Some(key) if key == self.window.config.complete => self.complete_task(),
-                Some(key) if key == self.window.config.up => self.move_selection(true),
-                Some(key) if key == self.window.config.down => self.move_selection(false),
+                // TODO: add home and end keys in config maybe, but I think it's universal anyway
+                Some(Key::Home) | Some(Key::Char('g')) => self.move_selection(MoveDirection::Home),
+                Some(key) if key == self.window.config.up => self.move_selection(MoveDirection::Up),
+                Some(key) if key == self.window.config.down => {
+                    self.move_selection(MoveDirection::Down)
+                }
+                Some(Key::End) | Some(Key::Char('G')) => self.move_selection(MoveDirection::End),
                 Some(key) if key == self.window.config.increase => self.increase_priority(),
                 Some(key) if key == self.window.config.decrease => self.decrease_priority(),
                 Some(key) if key == self.window.config.sort => self.sort_by_priority(),
@@ -231,6 +243,8 @@ impl<'a> View<'a> {
                 None => (),
             }
             if self.quit {
+                // TODO: Check config for value of save_on_exit
+                self.save();
                 self.window.endwin();
                 break;
             }
@@ -238,12 +252,12 @@ impl<'a> View<'a> {
     }
 
     /// Create a diaglogue for user input with specified prompt.
-    fn input_dialogue(&mut self, prompt: &str) -> String {
+    fn input_dialogue(&mut self, prompt: &str) -> Option<String> {
         self.dialogue(prompt, "")
     }
 
     /// Create an editing dialogue.
-    fn edit_dialogue(&mut self, prompt: &str, index: usize) -> String {
+    fn edit_dialogue(&mut self, prompt: &str, index: usize) -> Option<String> {
         let mut original = String::new();
         {
             let sub_tasks = &self.current_task.borrow().sub_tasks;
@@ -252,8 +266,10 @@ impl<'a> View<'a> {
         self.dialogue(prompt, &original)
     }
 
+    // fn show_toast(message: &str, duration: Duration) {}
+
     /// A dialogue box for user interaction.
-    fn dialogue(&mut self, prompt: &str, text: &str) -> String {
+    fn dialogue(&mut self, prompt: &str, text: &str) -> Option<String> {
         let mut entry = String::from(text);
         let mut index = entry.len(); // byte position
         let mut nchars = UnicodeWidthStr::width(entry.as_str()); // total displayed width
@@ -312,6 +328,12 @@ impl<'a> View<'a> {
 
             // User input
             match self.window.getch() {
+                Some(Key::Ctrl('c')) | Some(Key::Esc) => {
+                    return None;
+                }
+                // Some(key) if key == self.window.config.cancel => {
+                // return None;
+                // }
                 Some(Key::Char('\n')) => break,
                 Some(Key::Char(ch)) => {
                     if index >= entry.len() {
@@ -324,8 +346,84 @@ impl<'a> View<'a> {
                     chars += chwidth;
                     nchars += chwidth;
                 }
+                // TODO: Add Ctrl+Right key
+                Some(Key::Alt('f')) => {
+                    let start = index;
+                    if index < entry.len() {
+                        let spc_pos = entry[index..entry.len()]
+                            .find(' ')
+                            .unwrap_or(entry.len() - index);
+                        index += spc_pos;
+
+                        while index < entry.len() {
+                            if entry.is_char_boundary(index) && &entry[index..index + 1] != " " {
+                                break;
+                            }
+                            index += 1;
+                        }
+                        chars += UnicodeWidthStr::width(&entry[start..index]);
+                    }
+                }
+                // TODO: Add Ctrl+Left key
+                Some(Key::Alt('b')) => {
+                    if index > 0 {
+                        let end = index;
+                        while index > 0 {
+                            index -= 1;
+                            if entry.is_char_boundary(index) && &entry[index - 1..index] == " " {
+                                break;
+                            }
+                        }
+                        chars -= UnicodeWidthStr::width(&entry[index..end]);
+                    }
+                }
+                Some(Key::Ctrl('a')) => {
+                    index = 0;
+                    chars = 0;
+                }
+                Some(Key::Ctrl('e')) => {
+                    index = entry.len();
+                    chars = entry.len();
+                }
+                Some(Key::Ctrl('u')) => {
+                    if !entry.is_empty() && index > 0 {
+                        let end = index;
+                        index = 0;
+
+                        let chwidth = UnicodeWidthStr::width(&entry[index..end]);
+                        chars -= chwidth;
+                        nchars -= chwidth;
+                        entry.replace_range(index..end, "");
+                    }
+                }
+                Some(Key::Ctrl('w')) => {
+                    if !entry.is_empty() && index > 0 {
+                        let end = index;
+
+                        while index > 0 {
+                            if entry.is_char_boundary(index - 1) && &entry[index - 1..index] != " "
+                            {
+                                break;
+                            }
+                            index -= 1;
+                        }
+
+                        while index > 0 {
+                            if entry.is_char_boundary(index - 1) && &entry[index - 1..index] == " "
+                            {
+                                break;
+                            }
+                            index -= 1;
+                        }
+
+                        let chwidth = UnicodeWidthStr::width(&entry[index..end]);
+                        chars -= chwidth;
+                        nchars -= chwidth;
+                        entry.replace_range(index..end, "");
+                    }
+                }
                 Some(Key::Backspace) => {
-                    if !entry.is_empty() {
+                    if !entry.is_empty() && index > 0 {
                         let end = index;
                         while index > 0 {
                             index -= 1;
@@ -379,7 +477,7 @@ impl<'a> View<'a> {
                 _ => (),
             }
         }
-        entry
+        Some(entry)
     }
 
     /// Display a list of the sub-tasks of the current task.
@@ -522,12 +620,13 @@ impl<'a> View<'a> {
 
     /// Add new task from user input.
     fn add_task_from_input(&mut self) {
-        let task = self.input_dialogue("New Task:");
-        let parent = Rc::downgrade(&self.current_task);
-        let todo = ToDo::new(&task, parent);
-        let sub_tasks = &mut self.current_task.borrow_mut().sub_tasks;
-        sub_tasks.push(Rc::new(RefCell::new(todo)));
-        self.selection = Some(sub_tasks.len() - 1);
+        if let Some(task) = self.input_dialogue("New Task:") {
+            let parent = Rc::downgrade(&self.current_task);
+            let todo = ToDo::new(&task, parent);
+            let sub_tasks = &mut self.current_task.borrow_mut().sub_tasks;
+            sub_tasks.push(Rc::new(RefCell::new(todo)));
+            self.selection = Some(sub_tasks.len() - 1);
+        }
     }
 
     /// Add new task from string buffer.
@@ -600,20 +699,22 @@ impl<'a> View<'a> {
     /// Edited currently selected sub-task.
     fn edit_task(&mut self) {
         if let Some(index) = self.selection {
-            let task = self.edit_dialogue("Edit Task:", index);
-            let current_task = self.current_task.borrow_mut();
-            let mut sub_task = current_task.sub_tasks[index].borrow_mut();
-            sub_task.task = task;
+            if let Some(task) = self.edit_dialogue("Edit Task:", index) {
+                let current_task = self.current_task.borrow_mut();
+                let mut sub_task = current_task.sub_tasks[index].borrow_mut();
+                sub_task.task = task;
+            }
         }
     }
 
     /// Move selection cursor.
-    fn move_selection(&mut self, ifup: bool) {
+    fn move_selection(&mut self, dir: MoveDirection) {
         self.selection = if let Some(index) = self.selection {
-            if ifup {
-                self.up(index)
-            } else {
-                self.down(index)
+            match dir {
+                MoveDirection::Up => self.up(index),
+                MoveDirection::Down => self.down(index),
+                MoveDirection::Home => self.home(),
+                MoveDirection::End => self.end(),
             }
         } else {
             match self.current_task.borrow().sub_tasks.len() {
@@ -621,6 +722,26 @@ impl<'a> View<'a> {
                 _ => Some(0),
             }
         };
+    }
+
+    // Change index top
+    fn home(&self) -> Option<usize> {
+        let ntasks = self.current_task.borrow().sub_tasks.len();
+        if ntasks > 0 {
+            Some(0)
+        } else {
+            None
+        }
+    }
+
+    // Change index bottom
+    fn end(&self) -> Option<usize> {
+        let ntasks = self.current_task.borrow().sub_tasks.len();
+        if ntasks > 0 {
+            Some(ntasks - 1)
+        } else {
+            None
+        }
     }
 
     /// Change index (wrapping below).
@@ -648,7 +769,7 @@ impl<'a> View<'a> {
         let (ymax, xmax) = self.window.get_max_yx();
         self.window.border((ymax - 1, 0), (3, xmax));
         self.window.rectangle(' ', (ymax - 2, 1), (1, xmax - 2));
-        self.window.colour_on(1, 7);
+        self.window.colour_on(5, 8);
         self.window.mvprintw(ymax - 2, 2, prompt);
         self.window.colour_off();
         self.window.refresh();
@@ -675,7 +796,16 @@ impl<'a> View<'a> {
             if self.popup("Are you sure you want to delete this task? y/n") {
                 let mut current_task = self.current_task.borrow_mut();
                 current_task.sub_tasks.remove(index);
-                self.selection = None;
+
+                let ntasks = current_task.sub_tasks.len();
+
+                self.selection = if ntasks == 0 {
+                    None
+                } else if index == ntasks {
+                    Some(index - 1)
+                } else {
+                    Some(index)
+                };
             }
         }
     }

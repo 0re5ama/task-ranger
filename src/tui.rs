@@ -15,7 +15,7 @@ pub struct Window<'a> {
     stdin: Keys<Stdin>,
     /// Stdout, with terminal in raw-mode (no input line buffering, no echo).
     stdout: RawTerminal<Stdout>,
-    /// Yat configuration.
+    /// TodoRanger configuration.
     pub config: Config<'a>,
 }
 

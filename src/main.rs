@@ -1,6 +1,6 @@
 use std::env;
 use std::process;
-use yat::{
+use todo_ranger::{
     config::{check_for_config, Config},
     logger::setup_logger,
     look_for_save, View,
